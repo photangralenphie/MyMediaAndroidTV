@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">MyMedia</string>
+    <string name="genres_unavailable">Genres unavailable: %1$s</string>
+    <string name="video_unavailable">Unable to play this video</string>
+</resources>
