@@ -1,4 +1,4 @@
-package com.jonas.mymedia.tv.data
+package com.photangralenphie.mymedia.androidtv.data
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf

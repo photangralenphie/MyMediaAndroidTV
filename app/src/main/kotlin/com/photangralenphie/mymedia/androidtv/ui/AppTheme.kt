@@ -1,4 +1,4 @@
-package com.jonas.mymedia.tv.ui
+package com.photangralenphie.mymedia.androidtv.ui
 
 import android.graphics.Color as AndroidColor
 import androidx.compose.runtime.Composable
@@ -8,7 +8,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.darkColorScheme
 import androidx.tv.material3.lightColorScheme
-import com.jonas.mymedia.tv.data.Appearance
+import com.photangralenphie.mymedia.androidtv.data.Appearance
 
 @Composable
 fun MyMediaTheme(appearance: Appearance, content: @Composable () -> Unit) {

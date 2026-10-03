@@ -1,4 +1,4 @@
-package com.jonas.mymedia.tv.ui
+package com.photangralenphie.mymedia.androidtv.ui
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -19,6 +19,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
@@ -34,13 +37,22 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -50,9 +62,9 @@ import androidx.tv.material3.Border
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.jonas.mymedia.tv.data.ApiClient
-import com.jonas.mymedia.tv.data.ApiActivity
-import com.jonas.mymedia.tv.data.MediaPreview
+import com.photangralenphie.mymedia.androidtv.data.ApiClient
+import com.photangralenphie.mymedia.androidtv.data.ApiActivity
+import com.photangralenphie.mymedia.androidtv.data.MediaPreview
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -61,8 +73,72 @@ import java.util.concurrent.TimeUnit
 import java.io.File
 import java.net.URI
 
+@Composable
+fun LabeledField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    keyboardType: KeyboardType = KeyboardType.Text,
+    onSubmit: (() -> Unit)? = null,
+    imeAction: ImeAction = if (onSubmit != null) ImeAction.Search else ImeAction.Done,
+    focusRequester: FocusRequester? = null,
+) {
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+
+    fun submit() {
+        if (imeAction == ImeAction.Next) {
+            focusManager.moveFocus(FocusDirection.Next)
+        } else {
+            keyboard?.hide()
+            if (onSubmit == null) focusManager.clearFocus(force = true)
+        }
+        onSubmit?.invoke()
+    }
+
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        Text(label, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f))
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
+            keyboardActions = KeyboardActions(
+                onNext = { submit() },
+                onSearch = { submit() },
+                onDone = { submit() },
+            ),
+            modifier = Modifier
+                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+                .onPreviewKeyEvent { event ->
+                    val key = event.nativeKeyEvent
+                    if (
+                        onSubmit != null &&
+                        key.action == AndroidKeyEvent.ACTION_UP &&
+                        (key.keyCode == AndroidKeyEvent.KEYCODE_ENTER || key.keyCode == AndroidKeyEvent.KEYCODE_NUMPAD_ENTER)
+                    ) {
+                        submit()
+                        true
+                    } else {
+                        false
+                    }
+                }
+                .fillMaxWidth()
+                .height(52.dp)
+                .background(MaterialTheme.colorScheme.surface, MaterialTheme.shapes.small)
+                .padding(14.dp),
+        )
+    }
+}
+
 private object ArtworkLoader {
-    private val cache = LruCache<String, Bitmap>(32 * 1024 * 1024)
+    private const val CACHE_SIZE_BYTES = 32 * 1024 * 1024
+    private val cache = object : LruCache<String, Bitmap>(CACHE_SIZE_BYTES) {
+        override fun sizeOf(key: String, value: Bitmap): Int = value.allocationByteCount
+    }
     private val client = OkHttpClient.Builder().readTimeout(20, TimeUnit.SECONDS).build()
 
     suspend fun load(url: String): Bitmap? = cache.get(url) ?: withContext(Dispatchers.IO) {
@@ -86,11 +162,13 @@ private object ArtworkLoader {
 @Composable
 fun NetworkArtwork(url: String?, contentDescription: String?, modifier: Modifier = Modifier, contentScale: ContentScale = ContentScale.Crop) {
     val bitmap by produceState<Bitmap?>(null, url) {
+        value = null
         value = url?.let { ArtworkLoader.load(it) }
     }
     Box(modifier.background(Color(0xFF20242B)), contentAlignment = Alignment.Center) {
-        if (bitmap != null) {
-            Image(bitmap!!.asImageBitmap(), contentDescription, Modifier.fillMaxSize(), contentScale = contentScale)
+        val artwork = bitmap
+        if (artwork != null) {
+            Image(artwork.asImageBitmap(), contentDescription, Modifier.fillMaxSize(), contentScale = contentScale)
         } else {
             Icon(Icons.Default.PlayArrow, null, tint = Color.White.copy(alpha = .24f), modifier = Modifier.size(42.dp))
         }

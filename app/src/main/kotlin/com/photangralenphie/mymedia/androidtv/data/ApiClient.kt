@@ -1,4 +1,4 @@
-package com.jonas.mymedia.tv.data
+package com.photangralenphie.mymedia.androidtv.data
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -13,12 +13,6 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 class ApiClient(val baseUrl: String) {
-    private val jsonType = "application/json; charset=utf-8".toMediaType()
-    private val http = OkHttpClient.Builder()
-        .connectTimeout(4, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
-        .build()
-
     suspend fun health(): Boolean = runCatching {
         getObject("/api/v1/health", tracked = false).optString("status") == "ok"
     }.getOrDefault(false)
@@ -63,7 +57,7 @@ class ApiClient(val baseUrl: String) {
         val json = getObject(builder.build().toString())
         val array = json.optJSONArray("items") ?: JSONArray()
         return MediaPage(
-            items = List(array.length()) { MediaPreview.from(array.getJSONObject(it)) },
+            items = List(array.length()) { MediaPreview.fromJson(array.getJSONObject(it)) },
             page = json.optInt("page", page),
             perPage = json.optInt("perPage", perPage),
             totalItems = json.optInt("totalItems"),
@@ -82,41 +76,42 @@ class ApiClient(val baseUrl: String) {
         return List(array.length()) { array.getString(it) }
     }
 
-    suspend fun detail(preview: MediaPreview): JSONObject = getObject(
-        when (preview.kind) {
+    suspend fun detail(preview: MediaPreview): MediaDetail {
+        val endpoint = when (preview.kind) {
             "tvShow" -> "/api/v1/tv-shows/${preview.id}"
             "episode" -> "/api/v1/episodes/${preview.id}"
             "collection" -> "/api/v1/collections/${preview.id}"
             else -> "/api/v1/movies/${preview.id}"
         }
+        return MediaDetail.fromJson(getObject(endpoint), preview.kind)
+    }
+
+    suspend fun person(name: String): PersonDetail = PersonDetail.fromJson(
+        getObject(url("/api/v1/people/${encodePathSegment(name)}").toString())
     )
 
-    suspend fun person(name: String): JSONObject = getObject(
-        url("/api/v1/people/${java.net.URLEncoder.encode(name, "UTF-8").replace("+", "%20")}").toString()
-    )
-
-    suspend fun updateMedia(kind: String, id: String, changes: JSONObject): JSONObject = mutate(
-        method = "PATCH",
-        endpoint = when (kind) {
+    suspend fun updateMedia(kind: String, id: String, update: MediaUpdate): MediaDetail {
+        val endpoint = when (kind) {
             "tvShow" -> "/api/v1/tv-shows/$id"
             "episode" -> "/api/v1/episodes/$id"
             else -> "/api/v1/movies/$id"
-        },
-        body = changes,
-    )
+        }
+        return MediaDetail.fromJson(mutate("PATCH", endpoint, update.toJson()), kind)
+    }
 
-    suspend fun createCollection(title: String, description: String?, mediaIds: List<String>): JSONObject = mutate(
-        "POST", "/api/v1/collections", JSONObject().put("title", title)
+    suspend fun createCollection(title: String, description: String?, mediaIds: List<String>): MediaDetail = MediaDetail.fromJson(
+        mutate("POST", "/api/v1/collections", JSONObject().put("title", title)
             .put("collectionDescription", description?.takeIf { it.isNotBlank() } ?: JSONObject.NULL)
-            .put("mediaItemIDs", JSONArray(mediaIds)),
+            .put("mediaItemIDs", JSONArray(mediaIds))),
+        "collection",
     )
 
-    suspend fun updateCollection(id: String, add: List<String> = emptyList(), remove: List<String> = emptyList(), pinned: Boolean? = null): JSONObject {
+    suspend fun updateCollection(id: String, add: List<String> = emptyList(), remove: List<String> = emptyList(), pinned: Boolean? = null): MediaDetail {
         val body = JSONObject()
         if (add.isNotEmpty()) body.put("add", JSONArray(add))
         if (remove.isNotEmpty()) body.put("remove", JSONArray(remove))
         if (pinned != null) body.put("isPinned", pinned)
-        return mutate("PATCH", "/api/v1/collections/$id", body)
+        return MediaDetail.fromJson(mutate("PATCH", "/api/v1/collections/$id", body), "collection")
     }
 
     fun absoluteUrl(path: String?): String? {
@@ -130,8 +125,8 @@ class ApiClient(val baseUrl: String) {
             .getOrDefault(value)
     }
 
-    fun videoUrl(id: String): String = absoluteUrl("/api/v1/videos/$id")!!
-    fun downloadVideoUrl(id: String): String = absoluteUrl("/api/v1/videos/$id/download")!!
+    fun videoUrl(id: String): String = urlString("/api/v1/videos/$id")
+    fun downloadVideoUrl(id: String): String = urlString("/api/v1/videos/$id/download")
 
     private suspend fun getObject(endpoint: String, tracked: Boolean = true): JSONObject = JSONObject(execute(Request.Builder().url(urlString(endpoint)).get().build(), tracked))
     private suspend fun getArray(endpoint: String): JSONArray = JSONArray(execute(Request.Builder().url(urlString(endpoint)).get().build()))
@@ -156,4 +151,12 @@ class ApiClient(val baseUrl: String) {
 
     private fun url(endpoint: String) = urlString(endpoint).toHttpUrl()
     private fun urlString(endpoint: String) = if (endpoint.startsWith("http")) endpoint else baseUrl.trimEnd('/') + "/" + endpoint.trimStart('/')
+
+    private companion object {
+        val jsonType = "application/json; charset=utf-8".toMediaType()
+        val http = OkHttpClient.Builder()
+            .connectTimeout(4, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .build()
+    }
 }

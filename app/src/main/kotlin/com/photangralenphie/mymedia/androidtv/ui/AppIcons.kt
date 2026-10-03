@@ -1,4 +1,4 @@
-package com.jonas.mymedia.tv.ui
+package com.photangralenphie.mymedia.androidtv.ui
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor

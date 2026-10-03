@@ -1,4 +1,4 @@
-package com.jonas.mymedia.tv.ui
+package com.photangralenphie.mymedia.androidtv.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -28,11 +28,12 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.OutlinedButton
 import androidx.tv.material3.Text
-import com.jonas.mymedia.tv.data.ApiClient
-import com.jonas.mymedia.tv.data.DownloadStore
-import com.jonas.mymedia.tv.data.MediaPreview
+import com.photangralenphie.mymedia.androidtv.data.ApiClient
+import com.photangralenphie.mymedia.androidtv.data.DownloadStore
+import com.photangralenphie.mymedia.androidtv.data.MediaDetail
+import com.photangralenphie.mymedia.androidtv.data.MediaPreview
+import com.photangralenphie.mymedia.androidtv.data.MediaUpdate
 import kotlinx.coroutines.launch
-import org.json.JSONObject
 
 @Composable
 fun MediaContextMenu(
@@ -41,14 +42,14 @@ fun MediaContextMenu(
     online: Boolean,
     item: MediaPreview,
     onDismiss: () -> Unit,
-    onChanged: (JSONObject) -> Unit,
+    onChanged: () -> Unit,
     tvShowDownloadCount: Int = 3,
     navigateLabel: String? = null,
     onNavigate: (() -> Unit)? = null,
     removeLabel: String? = null,
     onRemove: (() -> Unit)? = null,
 ) {
-    var detail by remember(item) { mutableStateOf<JSONObject?>(null) }
+    var detail by remember(item) { mutableStateOf<MediaDetail?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
     var showCollections by remember { mutableStateOf(false) }
@@ -60,13 +61,13 @@ fun MediaContextMenu(
             .onFailure { error = it.message }
     }
 
-    fun update(key: String, value: Boolean) {
+    fun update(update: MediaUpdate) {
         scope.launch {
             saving = true
             runCatching {
-                if (item.kind == "collection") api.updateCollection(item.id, pinned = value)
-                else api.updateMedia(item.kind, item.id, JSONObject().put(key, value))
-            }.onSuccess { onChanged(it); onDismiss() }.onFailure { error = it.message }
+                if (item.kind == "collection") api.updateCollection(item.id, pinned = update.isPinned)
+                else api.updateMedia(item.kind, item.id, update)
+            }.onSuccess { onChanged(); onDismiss() }.onFailure { error = it.message }
             saving = false
         }
     }
@@ -78,7 +79,7 @@ fun MediaContextMenu(
             onDismiss = { showCollections = false },
             onDone = {
                 showCollections = false
-                onChanged(detail ?: JSONObject())
+                onChanged()
                 onDismiss()
             },
         )
@@ -132,34 +133,34 @@ fun MediaContextMenu(
                             downloading -> downloads.cancel(item.id)
                             downloaded -> scope.launch {
                                 downloads.delete(item.id)
-                                onChanged(value ?: JSONObject())
+                                onChanged()
                                 onDismiss()
                             }
                             item.kind == "tvShow" -> showTvDownloadDialog = true
                             value != null -> {
-                                downloads.startMediaDownload(api, item.kind, value)
+                                downloads.startMediaDownload(api, value)
                                 onDismiss()
                             }
                         }
                     }
                 }
                 if (online) {
-                    val favorite = value?.optBoolean("isFavorite") ?: false
+                    val favorite = value?.isFavorite ?: false
                     ContextAction(if (favorite) "Unfavorite" else "Favorite", Icons.Default.Star, saving || value == null) {
-                        update("isFavorite", !favorite)
+                        update(MediaUpdate(isFavorite = !favorite))
                     }
-                    val watched = value?.optBoolean("isWatched") ?: false
+                    val watched = value?.isWatched ?: false
                     ContextAction(
                         if (watched) "Mark unwatched" else "Mark watched",
                         if (watched) AppIcons.EyeSlash else AppIcons.Eye,
                         saving || value == null,
-                    ) { update("isWatched", !watched) }
+                    ) { update(MediaUpdate(isWatched = !watched)) }
                     ContextAction("Add to collection", AppIcons.CollectionStack, saving) { showCollections = true }
                 }
             }
             if (online) {
-                val pinned = value?.optBoolean("isPinned") ?: false
-                ContextAction(if (pinned) "Unpin" else "Pin", AppIcons.Pin, saving || value == null) { update("isPinned", !pinned) }
+                val pinned = value?.isPinned ?: false
+                ContextAction(if (pinned) "Unpin" else "Pin", AppIcons.Pin, saving || value == null) { update(MediaUpdate(isPinned = !pinned)) }
             }
             if (navigateLabel != null && onNavigate != null) ContextAction(navigateLabel, Icons.Default.CheckCircle, false) { onDismiss(); onNavigate() }
             if (online && removeLabel != null && onRemove != null) ContextAction(removeLabel, AppIcons.CollectionStack, false) { onDismiss(); onRemove() }
