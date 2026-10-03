@@ -15,4 +15,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "MyMediaAndroidTV"
-include(":app")
+include(":MyMediaAndroidTV")
